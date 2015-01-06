@@ -1,12 +1,13 @@
 import fileinput
 import sys
 from collections import OrderedDict
-
+from operator import itemgetter
 
 class DataConverter(object):
   def __init__(self, target_file):
     self.source_files = []
     self.target_file = target_file
+    self.groups = {}
   def add_source(self, source_file, alias):
       self.source_files.append([source_file, alias])
     #
@@ -14,12 +15,18 @@ class DataConverter(object):
     self.convert()
     self.save()
   def get_dict(self, source_file, alias, line_data):
-      data = OrderedDict()
+      data = {}
+      data["chr"] = line_data[0]
       data["name"] = "{0}.{1}.{2}.{3}".format(alias, line_data[0], line_data[1], line_data[-2])
-      data["size"] = long(line_data[2]) - long(line_data[1])
+      #data["size"] = long(line_data[2]) - long(line_data[1])
+      data["start"] = line_data[1]
       #data["strand"] = line_data[3]
       data["commonName"] = line_data[-2]
       data["group"] = line_data[-1]
+      if not (data["group"] in self.groups):
+          self.groups[data["group"]] = OrderedDict()
+      if (not alias in self.groups[data["group"]]):
+          self.groups[data["group"]][alias] = data["name"]
       data["file"] = alias
       data["source_file"] = source_file
       data["type"] = alias
@@ -35,6 +42,8 @@ class DataConverter(object):
                   if line_data[0] == "chr":
                       continue
                   self.data[alias].append(self.get_dict(source_file, alias, line_data))
+      for k in self.data.keys():
+          self.data[k].sort( key=itemgetter('chr', 'start'))
   def save(self):
       output_file = open(self.target_file, 'w')
       output_file.write('[\n')
@@ -50,9 +59,19 @@ class DataConverter(object):
       output_file.write(']\n')
       output_file.close()
   def data_to_string(self, source, record):
-     return "{\n"+(
+      return "{\n"+(
         ",\n".join(
-            [ "  \"{0}\": \"{1}\"".format(key, record[key]) for key in record.keys() ]
+            [ "  \"{0}\": \"{1}\"".format(key, record[key]) for key in record.keys() ] + [
+                "  \"imports\": [\n    {0}\n    ]".format(
+                    ",\n    ".join([
+                        "\"{0}\"".format(
+                            value
+                            ) for value in self.groups[record["group"]].values()] + [
+                                "\"{0}\"".format(record["name"])
+                            ]
+                        )
+                )
+            ]
         ) )+"\n}"
 
 
